@@ -42,7 +42,7 @@ def test_quote_with_ellipsis(small_doc):
 def test_linter_rules(small_doc):
     rules = {(s.rule, s.fragment) for s in lint(small_doc)}
     assert ("vague", "быстро") in rules
-    assert ("placeholder", "(пусто)") in rules
+    assert ("empty_row", "(пусто)") in rules
     assert ("empty_section", "Пустой раздел") in rules
     assert any(rule == "mixed_units" for rule, _ in rules)
 
@@ -59,10 +59,11 @@ def test_rule_findings_are_anchored(small_doc, tmp_path):
         )
     ]
     found = {f.title: f for f in rule_findings(small_doc, lint(small_doc), reqs)}
-    mixed = found["Денежные величины заданы в разных единицах: тенге и тиыны"]
+    mixed = found["Денежные суммы заданы в двух единицах: в тиынах и в тенге"]
     assert mixed.locations[0].quote == "Хранить сумму в тиынах и порог в тенге."
     assert verify_quote(small_doc, mixed.locations[0].block_id, mixed.locations[0].quote).ok
-    assert "Незаполненные поля и разделы шаблона" in found
+    blank = found["Незаполненные разделы и поля шаблона"]
+    assert "пустых разделов — 1" in blank.problem and "пустых строк таблиц — 1" in blank.problem
 
     path = tmp_path / "open.md"
     path.write_text("# Д\n\n* Коды 400, 401 и далее — ошибки.\n", encoding="utf-8")
@@ -73,6 +74,62 @@ def test_rule_findings_are_anchored(small_doc, tmp_path):
     ]
     open_list = next(f for f in rule_findings(doc, lint(doc), reqs) if f.title.startswith("Открытый"))
     assert open_list.rid == "R-01" and open_list.criterion == "unambiguous"
+
+
+def test_blank_sections_are_cited_by_heading(tmp_path):
+    from revizorro.ingestion import load_document
+    from revizorro.tools.linter import rule_findings
+
+    path = tmp_path / "blank.md"
+    lines = [
+        "# Док",
+        "",
+        "Версия документа: не указана.",
+        "",
+        "## 7. Откат",
+        "",
+        "## 8. Согласование",
+        "",
+        "| Роль | ФИО |",
+        "| --- | --- |",
+        "| | |",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    doc = load_document(path)
+    blank = next(f for f in rule_findings(doc, lint(doc), []) if f.title.startswith("Незаполненные"))
+    quotes = [loc.quote for loc in blank.locations]
+    assert "7. Откат" in quotes and "8. Согласование" in quotes  # numbered heading is not cut to "7."
+    assert "Версия документа: не указана." in quotes
+    assert all("(пусто)" not in q for q in quotes)  # our own markup is never presented as a quote
+    assert all(verify_quote(doc, loc.block_id, loc.quote).ok for loc in blank.locations)
+
+
+def test_dash_is_only_a_hint_and_conversion_rule_silences_unit_mix(tmp_path):
+    from revizorro.ingestion import load_document
+    from revizorro.tools.linter import rule_findings
+
+    lines = [
+        "# Док",
+        "",
+        "Сумма хранится в тиынах, порог задаётся в тенге. Пересчёт: 1 тенге = 100 тиынов.",
+        "",
+        "| Поле | DB field |",
+        "| --- | --- |",
+        "| result | — |",
+        "| Примечание: Да / Нет | |",
+        "",
+    ]
+    path = tmp_path / "doc.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    doc = load_document(path)
+    signals = lint(doc)
+    assert any(s.rule == "dash" for s in signals)
+    findings = rule_findings(doc, signals, [])
+    assert not any("единиц" in f.title for f in findings)  # the document describes the conversion
+    blank = next(f for f in findings if f.title.startswith("Незаполненные"))
+    assert "прочерк" not in blank.problem and "неотмеченных пунктов чек-листа" in blank.problem
+    assert [loc.quote for loc in blank.locations] == ["Примечание: Да / Нет"]  # empty-cell mark is not quoted
 
 
 def test_linter_deduplicates(small_doc):

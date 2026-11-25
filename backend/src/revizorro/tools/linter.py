@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-from revizorro.domain.models import Document, Finding, LinterSignal, Location, Requirement
+from revizorro.domain.models import Block, Document, Finding, LinterSignal, Location, Requirement
+
+EMPTY_MARK = "(пусто)"  # how the Markdown parser renders an empty table cell
 
 _VAGUE = [
     r"быстр\w*",
@@ -39,7 +41,14 @@ _OPEN_LIST_RE = re.compile(
 )
 
 _PLACEHOLDER_RE = re.compile(
-    r"(\bTBD\b|\bTODO\b|\?\?\?|заполня\w+ \w+|не заполнен\w*|\(пусто\)|Да / Нет|^—$|: —|\| — \||Prod: —)",
+    r"(\bTBD\b|\bTODO\b|\?\?\?|заполня\w+ \w+|не заполнен\w*|не указан\w*)", re.IGNORECASE
+)
+_UNCHECKED = "Да / Нет"  # checklist options left as printed in the template
+_DASH_RE = re.compile(r"(^—$|: —|Prod: —)")
+# The document explains how tiyn and tenge relate: a conversion verb next to a unit, or "1 тенге = 100 тиынов".
+_CONVERSION_RE = re.compile(
+    r"(пересч[её]т\w*|пересчит\w*|конверт\w*|перевод\w*)[^.]{0,40}(тиын|тенге)"
+    r"|1 ?тенге ?= ?100|100 ?тиын\w* ?= ?1|[/×*] ?100\b",
     re.IGNORECASE,
 )
 
@@ -66,16 +75,30 @@ def lint(doc: Document) -> list[LinterSignal]:
         for m in _PLACEHOLDER_RE.finditer(b.text):
             signals.append(
                 LinterSignal(
-                    block_id=b.id,
-                    rule="placeholder",
-                    message="заглушка или незаполненное поле шаблона",
-                    fragment=m.group(0).strip(" |:"),
+                    block_id=b.id, rule="placeholder", message="заглушка вместо текста", fragment=m.group(0)
                 )
             )
-        if b.kind == "table_row" and any(cell.strip() == "—" for cell in b.text.split(" | ")):
+        if _UNCHECKED in b.text:
             signals.append(
                 LinterSignal(
-                    block_id=b.id, rule="placeholder", message="значение не указано («—»)", fragment="—"
+                    block_id=b.id,
+                    rule="unchecked",
+                    message="пункт чек-листа не отмечен",
+                    fragment=_UNCHECKED,
+                )
+            )
+        cells = [c.strip() for c in b.text.split(" | ")] if b.kind == "table_row" else []
+        if cells and all(c == EMPTY_MARK for c in cells):
+            signals.append(
+                LinterSignal(
+                    block_id=b.id, rule="empty_row", message="пустая строка таблицы", fragment=EMPTY_MARK
+                )
+            )
+        # A dash may mean "not applicable", so it is only a hint for the agents, never a finding by itself.
+        if any(c == "—" for c in cells) or _DASH_RE.search(b.text):
+            signals.append(
+                LinterSignal(
+                    block_id=b.id, rule="dash", message="вместо значения стоит прочерк", fragment="—"
                 )
             )
 
@@ -124,16 +147,53 @@ def lint(doc: Document) -> list[LinterSignal]:
 
 
 def _quote_around(text: str, fragment: str, limit: int = 160) -> str:
-    """The sentence containing the fragment, trimmed to a verbatim window if it is long."""
+    """Verbatim quote for a rule hit: the whole block if short, else a window around the fragment."""
+    if len(text) <= limit:
+        return text
     at = text.lower().find(fragment.lower())
     if at < 0:
         return text[:limit]
-    start = max(text.rfind(". ", 0, at) + 2, 0) if text.rfind(". ", 0, at) >= 0 else 0
-    end = text.find(". ", at)
-    end = len(text) if end < 0 else end + 1
-    if end - start > limit:
-        start, end = max(0, at - limit // 2), min(len(text), at + len(fragment) + limit // 2)
+    start = max(0, at - limit // 2)
+    end = min(len(text), at + len(fragment) + limit // 2)
+    if start > 0:  # snap to word boundaries so the quote does not start or end mid-word
+        start = text.find(" ", start) + 1
+    if end < len(text):
+        end = text.rfind(" ", 0, end)
     return text[start:end].strip()
+
+
+def _row_quote(text: str, fragment: str) -> str:
+    """Contiguous non-empty cells of a table row around the fragment (our empty-cell mark is never quoted)."""
+    runs: list[list[str]] = [[]]
+    for cell in text.split(" | "):
+        if cell.strip() == EMPTY_MARK:
+            runs.append([])
+        else:
+            runs[-1].append(cell)
+    joined = [" | ".join(r) for r in runs if r]
+    return next((q for q in joined if fragment in q), joined[0] if joined else text)
+
+
+def _section_heading(doc: Document, block_id: str) -> Block | None:
+    """Nearest heading above a block."""
+    idx = next((i for i, b in enumerate(doc.blocks) if b.id == block_id), None)
+    if idx is None:
+        return None
+    for b in reversed(doc.blocks[: idx + 1]):
+        if b.kind == "heading":
+            return b
+    return None
+
+
+def _unique(locs: list[Location]) -> list[Location]:
+    seen: set[tuple[str, str]] = set()
+    out: list[Location] = []
+    for loc in locs:
+        key = (loc.block_id, loc.quote)
+        if key not in seen:
+            seen.add(key)
+            out.append(loc)
+    return out
 
 
 def rule_findings(doc: Document, signals: list[LinterSignal], reqs: list[Requirement]) -> list[Finding]:
@@ -143,26 +203,50 @@ def rule_findings(doc: Document, signals: list[LinterSignal], reqs: list[Require
 
     def loc(s: LinterSignal) -> Location:
         b = doc.block(s.block_id)
+        if s.fragment == EMPTY_MARK:
+            # An empty cell has no text to quote: cite the heading of its section instead of our markup.
+            heading = _section_heading(doc, s.block_id)
+            if heading is not None:
+                return Location(block_id=heading.id, quote=heading.text)
         text = b.text if b else s.fragment
+        if b is not None and b.kind == "table_row":
+            text = _row_quote(text, s.fragment)
         return Location(block_id=s.block_id, quote=_quote_around(text, s.fragment))
 
     mixed = [s for s in signals if s.rule == "mixed_units"]
-    if mixed:
+    if mixed and not any(_CONVERSION_RE.search(b.text) for b in doc.blocks):
+        tiyn_blocks = {s.block_id for s in mixed}
+        locations = [loc(s) for s in mixed[:2]]
+        tenge = next(
+            (
+                b
+                for b in doc.blocks
+                if b.kind != "heading"
+                and b.id not in tiyn_blocks
+                and re.search(r"тенге", b.text, re.IGNORECASE)
+            ),
+            None,
+        )
+        if tenge is not None:
+            text = _row_quote(tenge.text, "тенге") if tenge.kind == "table_row" else tenge.text
+            locations.append(Location(block_id=tenge.id, quote=_quote_around(text, "тенге")))
+        involved = tiyn_blocks | ({tenge.id} if tenge else set())
         out.append(
             Finding(
                 fid="",
                 scope="set",
-                related_rids=sorted({rid_of[s.block_id] for s in mixed if s.block_id in rid_of}),
+                related_rids=sorted({rid_of[b] for b in involved if b in rid_of}),
                 criterion="set_consistent",
                 severity="major",
-                title="Денежные величины заданы в разных единицах: тенге и тиыны",
-                problem="Часть сумм в документе задана в тенге (₸, KZT), часть — в тиынах. Не определено, "
-                "в каких единицах суммы хранятся, передаются и сравниваются, и где выполняется пересчёт.",
-                impact="Возможна ошибка сравнения или суммирования в 100 раз; тестировщик не знает, в каких "
-                "единицах проверять сохранённые и переданные значения.",
-                suggestion="Зафиксировать одну единицу для хранения и передачи денежных сумм (например, тиыны "
-                "целым числом) и правило пересчёта; указать единицу явно у каждого поля.",
-                locations=[loc(s) for s in mixed[:4]],
+                title="Денежные суммы заданы в двух единицах: в тиынах и в тенге",
+                problem="В документе одни денежные суммы заданы в тиынах, другие — в тенге (₸, KZT). "
+                "Где и как выполняется пересчёт между ними и как округляется результат, документ не описывает.",
+                impact="Если сумму в тиынах сравнить или сложить с суммой в тенге без пересчёта, результат "
+                "будет неверным в 100 раз. Тестировщику неясно, в каких единицах проверять значения "
+                "в хранилище, API и уведомлениях.",
+                suggestion="Выбрать одну единицу для хранения и передачи сумм или описать правило пересчёта "
+                "и округления; указать единицу у каждого денежного поля.",
+                locations=locations,
                 source_agent="linter",
             )
         )
@@ -187,15 +271,24 @@ def rule_findings(doc: Document, signals: list[LinterSignal], reqs: list[Require
             )
         )
 
-    blanks = [s for s in signals if s.rule in ("placeholder", "empty_section")]
+    blank_rules = {
+        "empty_section": ("пустых разделов", "раздел с заголовком, но без содержимого"),
+        "placeholder": ("заглушек вместо текста", "заглушка вместо текста"),
+        "unchecked": ("неотмеченных пунктов чек-листа («Да / Нет»)", "пункт чек-листа не отмечен"),
+        "empty_row": ("пустых строк таблиц", "пустая строка таблицы"),
+    }
+    blanks = [s for s in signals if s.rule in blank_rules]
     if blanks:
+        counts = {rule: len({s.block_id for s in blanks if s.rule == rule}) for rule in blank_rules}
+        parts = "; ".join(f"{blank_rules[rule][0]} — {n}" for rule, n in counts.items() if n)
         picked: list[LinterSignal] = []
-        seen_sections: set[str] = set()
-        for s in blanks:  # one location per section keeps the finding readable
+        seen_groups: set[tuple[str, str]] = set()
+        for s in blanks:  # one location per rule and section keeps the finding readable
             b = doc.block(s.block_id)
-            section = " › ".join(b.section) if b else s.block_id
-            if section not in seen_sections:
-                seen_sections.add(section)
+            # An empty section is its own group; other hits are grouped by the section they sit in.
+            section = s.block_id if b is None or b.kind == "heading" else " › ".join(b.section)
+            if (s.rule, section) not in seen_groups:
+                seen_groups.add((s.rule, section))
                 picked.append(s)
         out.append(
             Finding(
@@ -203,13 +296,11 @@ def rule_findings(doc: Document, signals: list[LinterSignal], reqs: list[Require
                 scope="set",
                 criterion="set_complete",
                 severity="minor",
-                title="Незаполненные поля и разделы шаблона",
-                problem=f"В документе {len({s.block_id for s in blanks})} незаполненных элементов шаблона: "
-                "пустые разделы, заглушки, неотмеченные варианты «Да / Нет», прочерки вместо значений.",
-                impact="Не видно, проведены ли ревью, согласования и тестирование требований; часть значений, "
-                "нужных для реализации, отсутствует.",
-                suggestion="Заполнить разделы или явно пометить их как неприменимые с причиной.",
-                locations=[loc(s) for s in picked[:6]],
+                title="Незаполненные разделы и поля шаблона",
+                problem=f"В документе остались незаполненные элементы шаблона: {parts}.",
+                impact="По документу нельзя понять, проведены ли ревью, согласование и тестирование требований.",
+                suggestion="Заполнить эти разделы и поля или явно пометить их как неприменимые с указанием причины.",
+                locations=_unique([loc(s) for s in picked])[:6],
                 source_agent="linter",
             )
         )
