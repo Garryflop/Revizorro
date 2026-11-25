@@ -8,7 +8,7 @@ from revizorro.agents.schemas import (
     Segmentation,
     SegRequirement,
 )
-from revizorro.agents.segmenter import postprocess
+from revizorro.agents.segmenter import merge, postprocess
 from revizorro.domain.models import Finding, Location
 
 
@@ -60,6 +60,42 @@ def test_segmenter_renumbers_in_document_order_and_remaps_traces(small_doc):
     assert res.requirements[2].traces_to == ["R-01"]
     assert any("X-7" in n for n in res.notes)
     assert res.unclassified_blocks  # paragraphs not mentioned by the segmenter
+
+
+def test_repair_pass_adds_skipped_blocks_and_keeps_links(small_doc):
+    f1 = next(b for b in small_doc.blocks if b.text.startswith("Ф-1."))
+    f2 = next(b for b in small_doc.blocks if b.text.startswith("Ф-2."))
+    row = next(b for b in small_doc.blocks if b.kind == "table_row")
+    data = next(b for b in small_doc.blocks if b.text.startswith("Хранить"))
+    first = postprocess(
+        small_doc,
+        Segmentation(
+            requirements=[
+                _seg("A", f1.id, "задаёт порог от 1 000", source_id="Ф-1"),
+                _seg("B", data.id, "Хранить сумму в тиынах", kind="data", traces_to=["A"]),
+            ]
+        ),
+    )
+    assert row.id in first.unclassified_blocks and f2.id in first.unclassified_blocks
+    assert all(small_doc.block(b).kind != "table_header" for b in first.unclassified_blocks)
+
+    repair = Segmentation(
+        requirements=[
+            _seg("N-01", row.id, "Порог 1 000 ₸", kind="acceptance", traces_to=["R-01", "R-99"]),
+            _seg("N-02", f1.id, "задаёт порог", source_id="Ф-1"),  # tries to re-claim a classified block
+        ],
+        template_blocks=[f2.id, f1.id],
+    )
+    out = merge(small_doc, first, repair)
+    assert [(r.rid, r.kind) for r in out.requirements] == [
+        ("R-01", "functional"),
+        ("R-02", "acceptance"),
+        ("R-03", "data"),
+    ]
+    assert out.requirements[1].traces_to == ["R-01"]
+    assert out.requirements[2].traces_to == ["R-01"]  # link survives renumbering
+    assert f2.id in out.template_blocks and f1.id not in out.template_blocks
+    assert row.id not in out.unclassified_blocks
 
 
 def test_critic_reject_merge_and_severity():
