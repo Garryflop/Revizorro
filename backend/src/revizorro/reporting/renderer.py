@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -167,8 +168,59 @@ def render_markdown(report: Report, answers_file: str = "answers.yaml") -> str:
     return text
 
 
+_REF_RE = re.compile(r"\b([RFQ]-\d{2,3})\b")
+_TAG_RE = re.compile(r"(<[^>]+>)")
+_NO_LINKS = {"a", "code", "pre", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+
+def link_references(html: str, merged: dict[str, str] | None = None) -> str:
+    """Make R-/F-/Q- identifiers clickable: an anchor where each one is defined, links elsewhere.
+
+    `merged` maps a merged finding to the finding it became part of.
+    """
+    merged = merged or {}
+    parts = _TAG_RE.split(html)
+    defined: set[str] = set()
+    # Pass 1: headings and bold item titles that start with an identifier become anchors.
+    for i, part in enumerate(parts[:-1]):
+        if re.fullmatch(r"<(h[1-6]|strong)>", part):
+            m = _REF_RE.match(parts[i + 1])
+            if m and m.group(1) not in defined:
+                defined.add(m.group(1))
+                parts[i] = f'{part[:-1]} id="{m.group(1)}">'
+
+    def link(ref: str, own: str | None) -> str:
+        target = ref
+        for _ in range(10):  # follow "merged into" links
+            if target in defined or target not in merged:
+                break
+            target = merged[target]
+        if target not in defined or target == own:
+            return ref
+        return f'<a class="ref" href="#{target}">{ref}</a>'
+
+    # Pass 2: link every other mention, except inside links, code and headings.
+    depth = 0
+    own: str | None = None
+    for i, part in enumerate(parts):
+        if part.startswith("<"):
+            name = re.match(r"</?([a-z0-9]+)", part)
+            if name and name.group(1) in _NO_LINKS:
+                depth += -1 if part.startswith("</") else 1
+            anchor = re.search(r' id="([RFQ]-\d{2,3})"', part)
+            own = anchor.group(1) if anchor else None
+        elif part:
+            if depth == 0:
+                current = own
+                parts[i] = _REF_RE.sub(lambda m, current=current: link(m.group(1), current), part)
+            own = None
+    return "".join(parts)
+
+
 def render_html(report: Report, markdown: str) -> str:
     body = MarkdownIt("commonmark", {"html": False, "typographer": False}).enable("table").render(markdown)
+    merged = {f.fid: f.merged_into for f in report.findings if f.status == "merged" and f.merged_into}
+    body = link_references(body, merged)
     return (
         environment()
         .get_template("report.html.j2")

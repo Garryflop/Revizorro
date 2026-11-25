@@ -42,9 +42,22 @@ async def summarize(
         decision = "ready_after_fixes"  # hard rule: critical defects rule out "ready"
     return Verdict(
         decision=decision,
-        development=out.development,
-        testing=out.testing,
-        rationale=out.rationale,
-        first_fixes=[FixItem(action=x.action, refs=x.refs) for x in out.first_fixes],
-        can_start_now=out.can_start_now,
+        development=humanize(out.development),
+        testing=humanize(out.testing),
+        rationale=humanize(out.rationale),
+        first_fixes=[FixItem(action=humanize(x.action), refs=x.refs) for x in out.first_fixes],
+        can_start_now=[humanize(x) for x in out.can_start_now],
     )
+
+
+_CODES = {
+    "ready_after_fixes": "начинать можно после исправлений",
+    "not_ready": "начинать нельзя",
+}
+
+
+def humanize(text: str) -> str:
+    """Replace enum codes the model sometimes leaks into prose."""
+    for code, phrase in _CODES.items():
+        text = text.replace(f"`{code}`", phrase).replace(code, phrase)
+    return text

@@ -6,22 +6,24 @@
 <title>{{ title }}</title>
 <style>
   :root {
-    --bg: #f7f6f2; --paper: #ffffff; --ink: #1d1f23; --muted: #5c6370; --line: #e3e1da;
-    --accent: #0f5c4d; --bad: #b42318; --warn: #b54708; --ok: #067647; --quote: #f1efe8;
+    --bg: #f5f6f8; --paper: #ffffff; --ink: #18233b; --muted: #5b6578; --line: #dde1e8;
+    --accent: #18233b; --bad: #c21f3a; --warn: #b86a0b; --ok: #2e7d5b; --quote: #eef1f5;
+    --link: #2f54eb; --mark: #fff1a8;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #15171a; --paper: #1c1f23; --ink: #e8e6e1; --muted: #a0a6b0; --line: #2e3238;
-      --accent: #5ec2a8; --bad: #f97066; --warn: #fdb022; --ok: #47cd89; --quote: #23272c;
+      --bg: #12161d; --paper: #1a1f28; --ink: #e4e8ef; --muted: #9aa3b2; --line: #2c3340;
+      --accent: #e4e8ef; --bad: #f0687d; --warn: #e0a148; --ok: #5cc195; --quote: #222935;
+      --link: #8aa2ff; --mark: #5a4d12;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink);
          font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
   main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 80px; }
-  .paper { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 8px 32px 32px; }
+  .paper { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 8px 32px 32px; }
   .badge { display: inline-block; margin: 24px 0 0; padding: 6px 14px; border-radius: 999px; font-weight: 600;
-           font-size: 14px; color: #fff; background: var(--accent); }
+           font-size: 14px; color: var(--paper); background: var(--ok); }
   .badge.not_ready { background: var(--bad); } .badge.ready_after_fixes { background: var(--warn); }
   h1 { font-size: 28px; line-height: 1.25; margin: 16px 0 8px; }
   h2 { font-size: 22px; margin: 40px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -38,6 +40,11 @@
   th { background: var(--quote); text-align: left; }
   td:has(> strong:only-child) { white-space: nowrap; }
   ol > li, ul > li { margin: 4px 0; }
+  /* R-07, F-057, Q-08 jump to the place where they are described */
+  a.ref { color: var(--link); font-weight: 500; text-decoration: underline dotted; text-underline-offset: 3px; }
+  a.ref:hover { text-decoration-style: solid; }
+  [id] { scroll-margin-top: 16px; }
+  :target { background: var(--mark); border-radius: 4px; box-shadow: 0 0 0 4px var(--mark); }
   ol > li > ul { margin-top: 4px; }
   @media (max-width: 640px) { .paper { padding: 4px 16px 24px; } h1 { font-size: 22px; } }
   @media print { body { background: #fff; } .paper { border: 0; padding: 0; } }

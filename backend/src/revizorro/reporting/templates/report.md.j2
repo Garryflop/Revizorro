@@ -14,12 +14,12 @@
 | Файл | `{{ p.source_file }}` ({{ p.source_format }}) |
 | SHA-256 файла | `{{ p.sha256 }}` |
 | Дата и время прогона | {{ p.started_at | when }} |
-| Модель | {% if p.model_default == p.model_strong %}`{{ p.model_default }}` на всех шагах{% else %}`{{ p.model_default }}` — нарезка, проверка требований, тест-дизайн; `{{ p.model_strong }}` — проверка набора, критик, вопросы, итог{% endif %}{% if p.models_used and p.models_used | reject("in", [p.model_default, p.model_strong]) | list %}. Фактически ответили: {% for m in p.models_used %}`{{ m }}`{% if not loop.last %}, {% endif %}{% endfor %} (переключение при исчерпании квоты){% endif %} |
+| Модель | {% if p.model_default == p.model_strong %}`{{ p.model_default }}` на всех шагах{% else %}`{{ p.model_default }}` — проверка требований, тест-дизайн; `{{ p.model_strong }}` — нарезка, проверка набора, критик, вопросы, итог{% endif %}{% if p.models_used and p.models_used | reject("in", [p.model_default, p.model_strong]) | list %}. Фактически ответили: {% for m in p.models_used %}`{{ m }}`{% if not loop.last %}, {% endif %}{% endfor %} (переключение при исчерпании квоты){% endif %} |
 | Версия агента | `{{ p.agent_version }}`, версия промптов `{{ p.prompts_version }}` |
 | Критерии | ISO/IEC/IEEE 29148:2018 п. 5.2.5 и 5.2.6; IEEE Std 830-1998 п. 4.3 |
 | Запросов к модели | {{ p.llm_calls }}{% if p.cached_calls %} (из кэша {{ p.cached_calls }}){% endif %} |
 | Токены | вход {{ p.input_tokens | num }}, выход {{ p.output_tokens | num }} |
-| Стоимость | {{ p.cost_usd | money(p) }} |
+| Стоимость по прайсу | {{ p.cost_usd | money(p) }} |
 | Длительность | {{ p.duration_s | dur }} |
 
 ## 2. Как агент нарезал требования
@@ -221,7 +221,7 @@
 | {% if o.label == q.recommended %}**{{ o.label }}** (рекомендуется){% else %}{{ o.label }}{% endif %} | {{ o.answer | cell }} | {{ o.consequence | cell }} |
 {% endfor %}
 
-Без ответа блокируется: {{ q.blocks_what }}
+Без ответа нельзя начать: {{ q.blocks_what[:1]|lower }}{{ q.blocks_what[1:] }}
 
 {% else %}
 Вопросов нет.
@@ -243,13 +243,14 @@
 {% endif %}
 - Повторная проверка: {% if w.remaining %}{% for f in w.remaining %}{{ f.criterion | crit }} ({{ f.severity | sev }}) — {{ f.title }}{% if not loop.last %}; {% endif %}{% endfor %}{% else %}замечаний нет{% endif %}
 
+
 {% endfor %}
 {% endfor %}
 {% endif %}
 ## Приложение A. Как проводилась проверка
 
 1. **Загрузка.** Документ ({{ p.source_format }}) разобран на {{ doc.blocks | length }} блоков с якорями: раздел, строка{% if p.source_format == "pdf" %}, страница{% endif %}. Линтер на правилах нашёл {{ r.linter | length }} сигналов (размытые слова, заглушки, пустые разделы, смешение единиц) — они переданы агентам как подсказки.
-2. **Нарезка.** Агент-нарезчик выделил требования; код проверил якоря и цитаты и перенумеровал требования по порядку.
+2. **Нарезка.** Агент-нарезчик выделил требования; код проверил якоря и цитаты и перенумеровал требования по порядку. Блоки, которые остались без классификации, прошли второй проход нарезки.
 3. **Параллельная проверка.** Ревьюер требований (ISO 29148 п. 5.2.5), тест-дизайнер, ревьюер согласованности и ревьюер полноты (ISO 29148 п. 5.2.6, IEEE 830 п. 4.3){% if has_api %}, а также ревьюер контракта API{% endif %} работали одновременно.
 4. **Верификация.** Код сверил каждую цитату с текстом документа; агент-критик перепроверил каждую находку, отклонил ложные и объединил дубли.
 5. **Вопросы и итог.** Агент уточнений составил вопросы-развилки, агент-итог — вердикт. Все числа в сводке посчитаны кодом.

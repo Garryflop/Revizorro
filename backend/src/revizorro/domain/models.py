@@ -80,11 +80,17 @@ class Document(BaseModel):
             parts.append(" › ".join(b.section[-2:]))
         if b.kind == "table_row":
             parts.append("строка таблицы")
+        if b.kind == "heading":
+            parts.append(f"заголовок «{b.text}»")
         if b.page is not None:
+            # PDF: line numbers belong to the intermediate Markdown and mean nothing to the reader.
             parts.append(f"стр. {b.page}")
-        parts.append(
-            f"строка {b.line_start}" if b.line_start == b.line_end else f"строки {b.line_start}–{b.line_end}"
-        )
+        else:
+            parts.append(
+                f"строка {b.line_start}"
+                if b.line_start == b.line_end
+                else f"строки {b.line_start}–{b.line_end}"
+            )
         return ", ".join(parts)
 
     def render_for_llm(self) -> str:
