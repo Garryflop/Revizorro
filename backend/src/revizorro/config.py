@@ -79,13 +79,15 @@ class Settings(BaseSettings):
     def resolve_models(self) -> tuple[str, str]:
         """Pick (default, strong) model ids, falling back to whichever key is present."""
         default = self.model_default
+        auto_strong: str | None = None
         if not default:
             if self.openai_model and self.openai_api_key:
                 default = f"openai:{self.openai_model}"
             elif self.gemini_model and self.gemini_api_key:
                 default = f"google:{self.gemini_model}"
             elif self.openai_api_key:
-                default = "openai:gpt-6-luna"
+                # Recommended balance: cheap model for bulk steps, stronger one where depth matters.
+                default, auto_strong = "openai:gpt-6-luna", "openai:gpt-6.1-terra"
             elif self.gemini_api_key:
                 default = "google:gemini-3.5-flash"
             else:
@@ -93,7 +95,7 @@ class Settings(BaseSettings):
                     "Не найден ключ модели. Укажите GEMINI_API_KEY или OPENAI_API_KEY в файле .env "
                     "(образец — .env.example) либо задайте MODEL_DEFAULT=ollama:<модель>."
                 )
-        strong = self.model_strong or default
+        strong = self.model_strong or auto_strong or default
         return normalize_model_id(default), normalize_model_id(strong)
 
 

@@ -30,6 +30,23 @@ SMALL_MD = """# Тестовый документ
 """
 
 
+@pytest.fixture(autouse=True)
+def _clean_env(monkeypatch):
+    """Tests must not depend on keys or model settings exported in the developer's shell."""
+    for name in (
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "MODEL_DEFAULT",
+        "MODEL_STRONG",
+        "MODEL_FALLBACKS",
+        "OPENAI_MODEL",
+        "GEMINI_MODEL",
+        "REVIZORRO_CONCURRENCY",
+        "REVIZORRO_BATCH_SIZE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def small_doc(tmp_path: Path) -> Document:
     path = tmp_path / "small.md"

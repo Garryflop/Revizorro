@@ -66,3 +66,21 @@ def test_all_models_exhausted_raises(tmp_path, monkeypatch):
     r = rn.LLMRunner(s, "google:gemini-3.5-flash", "google:gemini-3.5-flash")
     with pytest.raises(rn.LLMCallError, match="ни одна модель"):
         asyncio.run(r.run(agent_name="a", role="default", instructions="i", prompt="p", output_type=Out))
+
+
+def test_default_models(tmp_path):
+    both = _settings(tmp_path)
+    assert both.resolve_models() == ("openai:gpt-6-luna", "openai:gpt-6.1-terra")
+    gemini_only = Settings(GEMINI_API_KEY="g", REVIZORRO_CACHE_DIR=str(tmp_path))
+    assert gemini_only.resolve_models() == ("google:gemini-3.5-flash", "google:gemini-3.5-flash")
+    explicit = _settings(tmp_path, MODEL_DEFAULT="gpt-6-luna")
+    assert explicit.resolve_models() == ("openai:gpt-6-luna", "openai:gpt-6-luna")
+    with pytest.raises(RuntimeError, match="Не найден ключ"):
+        Settings(REVIZORRO_CACHE_DIR=str(tmp_path)).resolve_models()
+
+
+def test_humanize_removes_leaked_codes():
+    from revizorro.agents.summarizer import humanize
+
+    assert humanize("Решение — not_ready: есть пробел.") == "Решение — начинать нельзя: есть пробел."
+    assert humanize("Итог `ready_after_fixes`.") == "Итог начинать можно после исправлений."
