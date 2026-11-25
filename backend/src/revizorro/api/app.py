@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -124,6 +125,8 @@ async def create_run(
     strong_model: Annotated[str | None, Form()] = None,
 ) -> dict[str, Any]:
     suffix = Path(file.filename or "document.md").suffix.lower()
+    if suffix == ".json":
+        return _summary(_import(await file.read()))
     if suffix not in SUPPORTED:
         raise HTTPException(415, f"Формат {suffix} не поддерживается: {', '.join(sorted(SUPPORTED))}")
     default, strong = _models(model, strong_model)
@@ -136,11 +139,40 @@ async def create_run(
     return _summary(run)
 
 
+def _import(raw: bytes) -> Run:
+    """Open a report saved earlier (report.json) without calling the model."""
+    try:
+        report = Report.model_validate_json(raw)
+    except ValueError as e:
+        raise HTTPException(
+            422, "Это не отчёт Revizorro. Загрузите файл report.json, который лежит рядом с отчётом."
+        ) from e
+    source = Path(report.document.source_path)
+    if not source.is_file():
+        source = REPO_ROOT / source  # the path was relative to the folder the run started from
+    p = report.passport
+    run = Run(
+        uuid.uuid4().hex[:12],
+        source,
+        p.source_file,
+        p.model_default,
+        p.model_strong,
+        answers={r.qid: r.answer for r in report.resolutions},
+        status="done",
+        report=report,
+        markdown=render_markdown(report),
+    )
+    RUNS[run.id] = run
+    return run
+
+
 @app.get("/api/meta")
 def meta() -> dict[str, Any]:
     """Russian labels for codes used in the report: one source of truth for the UI."""
     return {
-        "criteria": {c.code: {"name": c.name, "source": c.source} for c in ALL.values()},
+        "criteria": {
+            c.code: {"name": c.name, "source": c.source, "violation": c.violation} for c in ALL.values()
+        },
         "individual": list(INDIVIDUAL),
         "set": list(SET),
         "severity": SEVERITY_RU,
@@ -164,6 +196,8 @@ def _models(model: str | None, strong_model: str | None) -> tuple[str, str]:
     if model:
         default = normalize_model_id(model)
         strong = normalize_model_id(strong_model) if strong_model else default
+    elif strong_model:
+        strong = normalize_model_id(strong_model)
     return default, strong
 
 
@@ -226,6 +260,10 @@ async def answer(run_id: str, body: AnswersIn) -> dict[str, Any]:
     prev = _get(run_id)
     if prev.report is None:
         raise HTTPException(409, "Сначала дождитесь завершения прогона")
+    if not prev.source.is_file():
+        raise HTTPException(
+            409, "Исходный документ недоступен. Загрузите его заново, чтобы переписать требования по ответам."
+        )
     answers = {**prev.answers, **{k: v for k, v in body.answers.items() if v.strip()}}
     run = _start(
         Run(uuid.uuid4().hex[:12], prev.source, prev.filename, prev.model_default, prev.model_strong, answers)
@@ -243,7 +281,7 @@ if _FRONTEND.is_dir():
 
 
 def serve() -> None:
-    """Entry point: `revizorro-api` (uvicorn on http://127.0.0.1:8000)."""
+    """Entry point: `revizorro-api` (uvicorn on http://127.0.0.1:8000, port from REVIZORRO_PORT)."""
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("REVIZORRO_PORT", "8000")))

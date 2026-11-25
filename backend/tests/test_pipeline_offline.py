@@ -18,6 +18,7 @@ def _canned(doc_blocks):
     f1 = next(b for b in doc_blocks if b.text.startswith("Ф-1."))
     f2 = next(b for b in doc_blocks if b.text.startswith("Ф-2."))
     row = next(b for b in doc_blocks if b.kind == "table_row")
+    data = next(b for b in doc_blocks if b.text.startswith("Хранить"))
     loc2 = s.LLMLocation(block_id=f2.id, quote="Система быстро отправляет уведомление")
     return {
         "segmenter": s.Segmentation(
@@ -50,6 +51,20 @@ def _canned(doc_blocks):
                     quote="Порог 1 000 ₸",
                     traces_to=["R-01"],
                 ),
+            ]
+        ),
+        # Repair pass: the data paragraph becomes a requirement, the rest stays unclassified.
+        "segmenter_repair": s.Segmentation(
+            requirements=[
+                s.SegRequirement(
+                    rid="N-01",
+                    source_id=None,
+                    source_ref="Данные",
+                    kind="data",
+                    summary="Хранение",
+                    block_ids=[data.id],
+                    quote="Хранить сумму в тиынах",
+                )
             ]
         ),
         "reviewer": s.ReviewBatch(
@@ -214,7 +229,9 @@ def test_offline_pipeline_end_to_end(tmp_path: Path, fake_llm):
     assert report.verdict.decision == "ready_after_fixes"  # critical finding forbids "ready"
     assert report.questions[0].qid == "Q-01"
     assert report.resolutions[0].rewrites[0].rid == "R-02"
-    assert {"segmenter", "reviewer", "critic", "resolver", "rechecker", "summarizer"} <= set(fake_llm)
+    assert {"segmenter", "segmenter_repair", "reviewer", "critic", "resolver", "rechecker"} <= set(fake_llm)
+    assert [r.kind for r in report.requirements] == ["functional", "functional", "acceptance", "data"]
+    assert report.requirements[3].rid == "R-04"  # added by the repair pass, numbered in document order
 
     paths = write_outputs(report, tmp_path / "out" / "report.md")
     md = paths.markdown.read_text(encoding="utf-8")
@@ -231,7 +248,35 @@ def test_offline_pipeline_end_to_end(tmp_path: Path, fake_llm):
         assert heading in md
     assert "«Система быстро отправляет уведомление»" in md
     assert "Подтверждают: F-002" in md
-    assert "3 требования" in md
-    assert paths.html.read_text(encoding="utf-8").startswith("<!doctype html>")
+    assert "4 требования" in md
+    html = paths.html.read_text(encoding="utf-8")
+    assert html.startswith("<!doctype html>")
+    assert 'id="R-02"' in html and 'href="#R-02"' in html  # references jump to the requirement card
     assert json.loads(paths.json.read_text(encoding="utf-8"))["passport"]["llm_calls"] == len(fake_llm)
     assert "Q-01:" in paths.answers.read_text(encoding="utf-8")
+
+
+def test_saved_report_opens_in_api_without_model_calls(tmp_path: Path, fake_llm):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from revizorro.api.app import app
+
+    src = tmp_path / "small.md"
+    src.write_text(SMALL_MD, encoding="utf-8")
+    settings = Settings(OPENAI_API_KEY="sk-test", REVIZORRO_CACHE_DIR=str(tmp_path / "cache"))
+    report = asyncio.run(run_review(src, settings, model_default="test:x", model_strong="test:y"))
+    paths = write_outputs(report, tmp_path / "out" / "report.md")
+    calls = len(fake_llm)
+
+    client = TestClient(app)
+    run = client.post(
+        "/api/runs", files={"file": ("report.json", paths.json.read_bytes(), "application/json")}
+    )
+    assert run.status_code == 200 and run.json()["status"] == "done"
+    opened = client.get(f"/api/runs/{run.json()['id']}/report").json()
+    assert len(opened["requirements"]) == len(report.requirements)
+    assert len(fake_llm) == calls  # nothing was sent to the model
+
+    wrong = client.post("/api/runs", files={"file": ("report.json", b'{"hello": 1}', "application/json")})
+    assert wrong.status_code == 422
