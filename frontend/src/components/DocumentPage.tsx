@@ -1,23 +1,18 @@
 import { Fragment, type ReactNode } from "react";
-import type { Block, Finding, Severity } from "../types";
-
-const RANK: Record<Severity, number> = { critical: 0, major: 1, minor: 2 };
-
-export function worst(findings: Finding[]): Severity | null {
-  return findings.reduce<Severity | null>((w, f) => (w === null || RANK[f.severity] < RANK[w] ? f.severity : w), null);
-}
+import { worst } from "../lib/labels";
+import type { Block, Finding } from "../types";
 
 // Highlight a quote inside block text; falls back to plain text when it is not found verbatim.
 function withMark(text: string, quote: string | null): ReactNode {
   if (!quote) return text;
-  const at = text.toLowerCase().indexOf(quote.toLowerCase().replace(/[«»"]/g, "").trim());
-  if (at < 0) return text;
-  const len = quote.replace(/[«»"]/g, "").trim().length;
+  const needle = quote.replace(/[«»"]/g, "").trim();
+  const at = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (at < 0 || !needle) return text;
   return (
     <>
       {text.slice(0, at)}
-      <mark>{text.slice(at, at + len)}</mark>
-      {text.slice(at + len)}
+      <mark>{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
     </>
   );
 }
@@ -34,12 +29,15 @@ export function DocumentPage({ blocks, marks, selectedBlock, quote, onSelect }: 
   const attrs = (b: Block) => {
     const fs = marks.get(b.id) ?? [];
     const sev = worst(fs);
+    const clickable = fs.length > 0;
     return {
       id: `blk-${b.id}`,
-      "data-count": fs.length ? String(fs.length) : undefined,
+      "data-count": clickable ? String(fs.length) : undefined,
       className: ["blk", sev && "marked", sev && `sev-${sev}`, selectedBlock === b.id && "selected"].filter(Boolean).join(" "),
-      onClick: fs.length ? () => onSelect(b.id) : undefined,
-      title: fs.length ? `${fs.length} замеч.: ${fs.map((f) => f.fid).join(", ")}` : undefined,
+      onClick: clickable ? () => onSelect(b.id) : undefined,
+      onKeyDown: clickable ? (e: React.KeyboardEvent) => e.key === "Enter" && onSelect(b.id) : undefined,
+      tabIndex: clickable ? 0 : undefined,
+      title: clickable ? `Замечаний к фрагменту: ${fs.length}. Нажмите, чтобы показать только их` : undefined,
     };
   };
   const text = (b: Block) => withMark(b.text, quote?.block === b.id ? quote.text : null);
@@ -59,14 +57,18 @@ export function DocumentPage({ blocks, marks, selectedBlock, quote, onSelect }: 
     <article className="page" aria-label="Проверяемый документ">
       {groups.map((g) => {
         const first = g[0];
-        if (first.kind === "table_header" || first.kind === "table_row") {
+        if (isTable(first)) {
           return (
             <table key={first.id}>
               <tbody>
                 {g.map((b) => (
                   <tr key={b.id} {...attrs(b)}>
                     {b.text.split(" | ").map((cell, i) =>
-                      b.kind === "table_header" ? <th key={i}>{cell}</th> : <td key={i}>{cell === "(пусто)" ? "" : withMark(cell, quote?.block === b.id ? quote.text : null)}</td>,
+                      b.kind === "table_header" ? (
+                        <th key={i}>{cell}</th>
+                      ) : (
+                        <td key={i}>{cell === "(пусто)" ? "" : withMark(cell, quote?.block === b.id ? quote.text : null)}</td>
+                      ),
                     )}
                   </tr>
                 ))}
@@ -93,12 +95,24 @@ export function DocumentPage({ blocks, marks, selectedBlock, quote, onSelect }: 
                 case "heading": {
                   const level = Math.min(4, b.heading_level ?? 2);
                   const H = `h${level}` as "h1";
-                  return <H key={b.id} {...a}>{text(b)}</H>;
+                  return (
+                    <H key={b.id} {...a}>
+                      {text(b)}
+                    </H>
+                  );
                 }
                 case "code":
-                  return <pre key={b.id} {...a}>{text(b)}</pre>;
+                  return (
+                    <pre key={b.id} {...a}>
+                      {text(b)}
+                    </pre>
+                  );
                 default:
-                  return <p key={b.id} {...a}>{text(b)}</p>;
+                  return (
+                    <p key={b.id} {...a}>
+                      {text(b)}
+                    </p>
+                  );
               }
             })}
           </Fragment>

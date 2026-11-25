@@ -29,6 +29,13 @@ export interface Location {
   block_id: string;
   quote: string;
   label: string;
+  verified?: boolean;
+}
+
+export interface Unassessable {
+  rid: string;
+  criterion: string;
+  reason: string;
 }
 
 export interface Scenario {
@@ -84,6 +91,7 @@ export interface Question {
   finding_ids: string[];
   rids: string[];
   blocks_what: string;
+  priority?: number;
 }
 
 export interface Rewrite {
@@ -113,6 +121,8 @@ export interface Passport {
   document_title: string;
   source_file: string;
   source_format: string;
+  sha256?: string;
+  prompts_version?: string;
   started_at: string;
   duration_s: number;
   model_default: string;
@@ -130,7 +140,12 @@ export interface Report {
   passport: Passport;
   document: { title: string; blocks: Block[] };
   requirements: Requirement[];
+  context_blocks: string[];
+  template_blocks: string[];
+  unclassified_blocks: string[];
+  segmentation_notes: string[];
   findings: Finding[];
+  unassessable: Unassessable[];
   probes: TestProbe[];
   questions: Question[];
   resolutions: Resolution[];
@@ -138,7 +153,7 @@ export interface Report {
 }
 
 export interface Meta {
-  criteria: Record<string, { name: string; source: string }>;
+  criteria: Record<string, { name: string; source: string; violation?: string }>;
   individual: string[];
   set: string[];
   severity: Record<Severity, string>;

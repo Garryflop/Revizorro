@@ -11,7 +11,10 @@ type View =
   | { name: "report"; runId: string; report: Report };
 
 // Run id lives in the URL hash so a reload or a shared link reopens the same result.
-const runFromHash = () => /^#\/run\/([\w-]+)/.exec(window.location.hash)?.[1] ?? null;
+const parseHash = () => {
+  const m = /^#\/run\/([\w-]+)(?:\/(\w+))?(?:\/([RFQ]-\d+))?/.exec(window.location.hash);
+  return m ? { id: m[1], tab: m[2], item: m[3] } : null;
+};
 
 export function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -19,7 +22,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
 
   const openRun = useCallback(async (runId: string) => {
-    window.location.hash = `#/run/${runId}`;
+    if (parseHash()?.id !== runId) window.location.hash = `#/run/${runId}`;
     try {
       const run = await api.run(runId);
       if (run.status === "done") setView({ name: "report", runId, report: await api.report(runId) });
@@ -32,7 +35,7 @@ export function App() {
 
   useEffect(() => {
     api.meta().then(setMeta).catch((e) => setError(`API недоступен: ${e.message}. Запустите revizorro-api.`));
-    const id = runFromHash();
+    const id = parseHash()?.id;
     if (id) void openRun(id);
   }, [openRun]);
 
@@ -51,7 +54,18 @@ export function App() {
     );
   }
   if (view.name === "report" && meta) {
-    return <ReportView report={view.report} meta={meta} runId={view.runId} onRestart={restart} onRun={openRun} />;
+    return (
+      <ReportView
+        key={view.runId}
+        report={view.report}
+        meta={meta}
+        runId={view.runId}
+        initialTab={parseHash()?.tab}
+        initialItem={parseHash()?.item}
+        onRestart={restart}
+        onRun={openRun}
+      />
+    );
   }
   return <Start meta={meta} error={error} onRun={openRun} />;
 }
