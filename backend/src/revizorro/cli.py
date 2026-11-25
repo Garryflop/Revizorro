@@ -71,9 +71,18 @@ def _ask_interactively(questions: list[Question]) -> dict[str, str]:
         for o in q.options:
             mark = " [green](рекомендуется)[/]" if o.label == q.recommended else ""
             table.add_row(f"[bold]{o.label}[/]{mark}", o.answer, f"[dim]{o.consequence}[/]")
-        console.print(Panel(table, title=f"{q.qid} → {q.addressee}", subtitle=q.blocks_what, expand=True))
-        console.print(f"[bold]{q.question}[/]\n[dim]{q.why}[/]")
-        raw = Prompt.ask("Ответ", default="", show_default=False).strip()
+        # Question first, then the options, then the prompt.
+        console.print(f"\n[bold]{q.qid} → {q.addressee}. {q.question}[/]\n[dim]{q.why}[/]")
+        console.print(
+            Panel(
+                table,
+                subtitle=f"Без ответа нельзя начать: {q.blocks_what[:1].lower()}{q.blocks_what[1:]}",
+                expand=True,
+            )
+        )
+        raw = Prompt.ask(
+            "Ответ (буква, свой текст, Enter — пропустить, q — закончить)", default="", show_default=False
+        ).strip()
         if raw.lower() in ("q", "й", "quit", "exit"):
             break
         if raw:
