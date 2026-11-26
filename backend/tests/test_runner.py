@@ -84,3 +84,32 @@ def test_humanize_removes_leaked_codes():
 
     assert humanize("Решение — not_ready: есть пробел.") == "Решение — начинать нельзя: есть пробел."
     assert humanize("Итог `ready_after_fixes`.") == "Итог начинать можно после исправлений."
+
+
+def test_cache_only_never_calls_the_model(tmp_path, monkeypatch):
+    s = _settings(tmp_path)
+
+    async def must_not_run(self, *args, **kwargs):
+        raise AssertionError("the model was called in cache-only mode")
+
+    monkeypatch.setattr(rn.LLMRunner, "_call", must_not_run)
+    offline = rn.LLMRunner(s, "openai:gpt-6-luna", "openai:gpt-6-luna", cache_only=True)
+    args = {
+        "agent_name": "reviewer",
+        "role": "default",
+        "instructions": "i",
+        "prompt": "p",
+        "output_type": Out,
+    }
+    with pytest.raises(rn.LLMCallError, match="cache-only"):
+        asyncio.run(offline.run(**args))
+
+    # Once the answer is in the cache, the same request is served without the model.
+    offline._store(
+        offline._cache_file("reviewer", "openai:gpt-6-luna", "i", "p", Out.model_json_schema()),
+        "reviewer",
+        "openai:gpt-6-luna",
+        Out(value="cached"),
+        {"input": 1, "output": 1, "cost": 0.0},
+    )
+    assert asyncio.run(offline.run(**args)).value == "cached"

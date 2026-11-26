@@ -52,12 +52,14 @@ class LLMRunner:
         model_strong: str,
         *,
         use_cache: bool = True,
+        cache_only: bool = False,
         on_event: EventSink | None = None,
     ) -> None:
         self.settings = settings
         self.model_ids: dict[Role, str] = {"default": model_default, "strong": model_strong}
         self.fallbacks = settings.resolve_fallbacks(model_default)
-        self.use_cache = use_cache
+        self.use_cache = use_cache or cache_only
+        self.cache_only = cache_only  # never call the model: a cache miss is an error
         self.cache_dir = Path(settings.cache_dir)
         self.on_event = on_event or (lambda _e: None)
         self.records: list[LLMCallRecord] = []
@@ -121,6 +123,12 @@ class LLMRunner:
                         0,
                     )
                     return output_type.model_validate(data["output"])
+
+        if self.cache_only:
+            raise LLMCallError(
+                f"{agent_name}: ответа нет в кэше для модели {chain[0]}, а режим --cache-only запрещает "
+                "обращаться к модели. Уберите флаг или запустите с теми же моделями, что и прошлый прогон."
+            )
 
         reasons: list[str] = []
         for model_id in chain:

@@ -90,12 +90,15 @@ async def run_review(
     answers: dict[str, str] | None = None,
     ask: AskFn | None = None,
     use_cache: bool = True,
+    cache_only: bool = False,
     on_event: EventSink | None = None,
 ) -> Report:
     emit = on_event or (lambda _e: None)
     started = time.perf_counter()
     started_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    runner = LLMRunner(settings, model_default, model_strong, use_cache=use_cache, on_event=emit)
+    runner = LLMRunner(
+        settings, model_default, model_strong, use_cache=use_cache, cache_only=cache_only, on_event=emit
+    )
 
     def stage(name: str, status: str, **extra: Any) -> None:
         emit({"type": "stage", "stage": name, "status": status, **extra})

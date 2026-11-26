@@ -117,6 +117,12 @@ def main(
         bool, typer.Option("--interactive", "-i", help="Задать вопросы-развилки в терминале")
     ] = False,
     no_cache: Annotated[bool, typer.Option("--no-cache", help="Не использовать кэш ответов модели")] = False,
+    cache_only: Annotated[
+        bool,
+        typer.Option(
+            "--cache-only", help="Брать ответы только из кэша: к модели не обращаться, токены не тратить"
+        ),
+    ] = False,
     concurrency: Annotated[int | None, typer.Option(help="Сколько запросов к модели одновременно")] = None,
     batch_size: Annotated[
         int | None, typer.Option(help="Сколько требований проверять за один запрос")
@@ -146,6 +152,9 @@ def main(
     elif strong_model:
         strong = normalize_model_id(strong_model)
 
+    if cache_only and no_cache:
+        console.print("[red]Флаги --cache-only и --no-cache исключают друг друга.[/]")
+        raise typer.Exit(1)
     given_answers = _load_answers(answers) if answers else None
     console.print(f"[bold]Revizorro {__version__}[/] · {input_file} · модели: {default} / {strong}")
 
@@ -159,6 +168,7 @@ def main(
                 answers=given_answers,
                 ask=_ask_interactively if interactive else None,
                 use_cache=not no_cache,
+                cache_only=cache_only,
                 on_event=_on_event,
             )
         )
