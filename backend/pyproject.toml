@@ -14,10 +14,7 @@ dependencies = [
     "pymupdf4llm>=1.27",
     "python-docx>=1.2",
     "pyyaml>=6.0",
-]
-
-[project.optional-dependencies]
-api = [
+    # web interface (revizorro-api); part of the default install so the README commands work as written
     "fastapi>=0.120",
     "uvicorn[standard]>=0.38",
     "sse-starlette>=3.0",

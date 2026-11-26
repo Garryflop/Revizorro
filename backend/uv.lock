@@ -1724,6 +1724,7 @@ name = "revizorro"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "jinja2" },
     { name = "markdown-it-py" },
     { name = "pydantic" },
@@ -1731,16 +1732,11 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymupdf4llm" },
     { name = "python-docx" },
+    { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "rich" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-api = [
-    { name = "fastapi" },
-    { name = "python-multipart" },
     { name = "sse-starlette" },
+    { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1754,7 +1750,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.120" },
+    { name = "fastapi", specifier = ">=0.120" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "markdown-it-py", specifier = ">=4.0" },
     { name = "pydantic", specifier = ">=2.12" },
@@ -1762,14 +1758,13 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.12" },
     { name = "pymupdf4llm", specifier = ">=1.27" },
     { name = "python-docx", specifier = ">=1.2" },
-    { name = "python-multipart", marker = "extra == 'api'", specifier = ">=0.0.20" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=14" },
-    { name = "sse-starlette", marker = "extra == 'api'", specifier = ">=3.0" },
+    { name = "sse-starlette", specifier = ">=3.0" },
     { name = "typer", specifier = ">=0.20" },
-    { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.38" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38" },
 ]
-provides-extras = ["api"]
 
 [package.metadata.requires-dev]
 dev = [
