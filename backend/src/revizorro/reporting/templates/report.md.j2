@@ -17,10 +17,10 @@
 | Модель | {% if p.model_default == p.model_strong %}`{{ p.model_default }}` на всех шагах{% else %}`{{ p.model_default }}` — проверка требований, тест-дизайн; `{{ p.model_strong }}` — нарезка, проверка набора, критик, вопросы, итог{% endif %}{% if p.models_used and p.models_used | reject("in", [p.model_default, p.model_strong]) | list %}. Фактически ответили: {% for m in p.models_used %}`{{ m }}`{% if not loop.last %}, {% endif %}{% endfor %} (переключение при исчерпании квоты){% endif %} |
 | Версия агента | `{{ p.agent_version }}`, версия промптов `{{ p.prompts_version }}` |
 | Критерии | ISO/IEC/IEEE 29148:2018 п. 5.2.5 и 5.2.6; IEEE Std 830-1998 п. 4.3 |
-| Запросов к модели | {{ p.llm_calls }}{% if p.cached_calls %} (из кэша {{ p.cached_calls }}){% endif %} |
+| Запросов к модели | {{ p.llm_calls }}{% if p.cached_calls and p.cached_calls == p.llm_calls %}, все ответы взяты из кэша прогона с теми же моделями и промптами{% elif p.cached_calls %} (из кэша {{ p.cached_calls }}){% endif %} |
 | Токены | вход {{ p.input_tokens | num }}, выход {{ p.output_tokens | num }} |
 | Стоимость по прайсу | {{ p.cost_usd | money(p) }} |
-| Длительность | {{ p.duration_s | dur }} |
+| Длительность | {{ p.duration_s | dur }}{% if p.cached_calls and p.cached_calls == p.llm_calls %} — отчёт собран из кэша, модель в этом запуске не вызывалась{% endif %} |
 
 ## 2. Как агент нарезал требования
 
@@ -201,7 +201,12 @@
 
 {% endfor %}
 {% if r.verdict.can_start_now %}
-**Можно начинать уже сейчас:** {{ r.verdict.can_start_now | join("; ") }}.
+
+**Можно начинать уже сейчас**
+
+{% for x in r.verdict.can_start_now %}
+- {{ x }}
+{% endfor %}
 {% endif %}
 
 ## 7. Вопросы к авторам документа
