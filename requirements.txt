@@ -1,4 +1,4 @@
-# Зависимости агента Revizorro (Python 3.12+). Установка из корня репозитория:
+# Зависимости агента Revizorro (Python 3.11+). Установка из корня репозитория:
 #   pip install -r requirements.txt
 # Версии закреплены по backend/uv.lock; обновить: uv export --project backend --no-dev --no-hashes --no-emit-project
 
@@ -67,7 +67,7 @@ httpx2==2.16.2
     #   genai-prices
     #   openai
     #   pydantic-ai-slim
-httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
+httpx2-jsfetch==1.0 ; python_full_version >= '3.12' and sys_platform == 'emscripten'
     # via httpx2
 idna==3.20
     # via
@@ -91,9 +91,15 @@ markupsafe==3.0.4
     # via jinja2
 mdurl==0.1.2
     # via markdown-it-py
-networkx==3.7
+networkx==3.6.1 ; python_full_version < '3.12'
     # via pymupdf
-numpy==2.5.5
+networkx==3.7 ; python_full_version >= '3.12'
+    # via pymupdf
+numpy==2.4.6 ; python_full_version < '3.12'
+    # via
+    #   onnxruntime
+    #   pymupdf
+numpy==2.5.5 ; python_full_version >= '3.12'
     # via
     #   onnxruntime
     #   pymupdf

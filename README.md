@@ -12,7 +12,7 @@ Revizorro проводит статическое ревью документа 
 
 ## Быстрый старт
 
-Нужны Python 3.12+ и [uv](https://docs.astral.sh/uv/getting-started/installation/) (или обычный `pip`, см. ниже).
+Нужны Python 3.11+ и [uv](https://docs.astral.sh/uv/getting-started/installation/) (или обычный `pip`, см. ниже).
 
 **1. Получите ключ модели.** Хватает одного из двух:
 
@@ -47,7 +47,7 @@ uv run --project backend revizorro examples/requirements.md reports/report.md
 
 ### Без uv
 
-Подойдёт обычный `pip` и Python 3.12+. Из корня репозитория:
+Подойдёт обычный `pip` и Python 3.11+. Из корня репозитория:
 
 ```bash
 pip install -r requirements.txt

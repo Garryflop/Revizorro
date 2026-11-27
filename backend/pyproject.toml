@@ -2,7 +2,7 @@
 name = "revizorro"
 version = "1.0.0"
 description = "ИИ-агент статической проверки требований: ISO/IEC/IEEE 29148, IEEE 830, отчёт на русском"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "pydantic-ai-slim[openai,google]==2.67.0",
     "pydantic>=2.12",
@@ -42,7 +42,7 @@ packages = ["src/revizorro"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
