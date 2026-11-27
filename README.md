@@ -47,12 +47,14 @@ uv run --project backend revizorro examples/requirements.md reports/report.md
 
 ### Без uv
 
+Подойдёт обычный `pip` и Python 3.12+. Из корня репозитория:
+
 ```bash
-python -m venv .venv
-.venv/bin/activate                # Windows: .venv\Scripts\activate
-pip install -e ./backend
-revizorro examples/requirements.md reports/report.md
+pip install -r requirements.txt
+python main.py --input examples/requirements.md --output reports/report.md
 ```
+
+`main.py` — тонкая обёртка над той же командой `revizorro`: принимает `--input` и `--output` или два пути подряд, остальные параметры передаёт без изменений. В `requirements.txt` закреплены те же версии зависимостей, что и в `backend/uv.lock`.
 
 ## Модели
 
@@ -268,6 +270,8 @@ backend/src/revizorro/
   pipeline/    оркестратор и статистика
   reporting/   шаблоны и рендер отчёта
 examples/      выданный организаторами документ и отчёты агента по нему
+main.py           запуск без uv: python main.py --input … --output …
+requirements.txt  закреплённые зависимости для pip
 ```
 
 ## Ограничения
