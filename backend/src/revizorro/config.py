@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     batch_size: int | None = Field(default=None, ge=1, le=60, alias="REVIZORRO_BATCH_SIZE")
     thinking: Literal["low", "medium", "high"] = Field(default="medium", alias="REVIZORRO_THINKING")
     cache_dir: Path = Field(default=Path(".revizorro_cache"), alias="REVIZORRO_CACHE_DIR")
+    # Never call the model: answers come from the cache or the run stops (safe demos, zero spend).
+    cache_only: bool = Field(default=False, alias="REVIZORRO_CACHE_ONLY")
     max_attempts: int = Field(default=6, ge=1, le=20, alias="REVIZORRO_MAX_ATTEMPTS")
 
     def resolve_fallbacks(self, primary: str) -> list[str]:

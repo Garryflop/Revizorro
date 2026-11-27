@@ -70,6 +70,7 @@ async def _execute(run: Run) -> None:
             model_default=run.model_default,
             model_strong=run.model_strong,
             answers=run.answers or None,
+            cache_only=settings.cache_only,
             on_event=run.push,
         )
         run.report = report

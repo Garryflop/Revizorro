@@ -168,7 +168,7 @@ def main(
                 answers=given_answers,
                 ask=_ask_interactively if interactive else None,
                 use_cache=not no_cache,
-                cache_only=cache_only,
+                cache_only=cache_only or settings.cache_only,
                 on_event=_on_event,
             )
         )

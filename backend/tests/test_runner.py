@@ -22,6 +22,7 @@ def test_provider_defaults(tmp_path):
     assert s.concurrency_for("google:x") == 2 and s.concurrency_for("openai:x") == 6
     assert s.resolve_fallbacks("google:gemini-3.5-flash") == list(GOOGLE_FREE_CHAIN)
     assert s.resolve_fallbacks("openai:gpt-6-luna") == []
+    assert s.cache_only is False and _settings(tmp_path, REVIZORRO_CACHE_ONLY="1").cache_only is True
     custom = _settings(tmp_path, MODEL_FALLBACKS="openai:gpt-6-luna, google:gemini-3.1-flash-lite")
     assert custom.resolve_fallbacks("openai:gpt-6.1-sol") == ["openai:gpt-6-luna"]
 
